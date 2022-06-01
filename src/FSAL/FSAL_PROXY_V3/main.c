@@ -499,7 +499,7 @@ static fsal_status_t proxyv3_lookup_internal(struct fsal_export *export_handle,
 			      NFSPROC3_LOOKUP, (xdrproc_t)xdr_LOOKUP3args,
 			      &args, (xdrproc_t)xdr_LOOKUP3res, &result)) {
 		LogWarn(COMPONENT_FSAL, "LOOKUP3 failed");
-		return fsalstat(ERR_FSAL_INVAL, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	if (result.status != NFS3_OK) {
@@ -569,7 +569,7 @@ static fsal_status_t proxyv3_getattr_from_fh3(struct nfs_fh3 *fh3,
 			      &args, (xdrproc_t)xdr_GETATTR3res, &result)) {
 		LogWarn(COMPONENT_FSAL, "proxyv3_nfs_call failed (%u)",
 			result.status);
-		return fsalstat(ERR_FSAL_INVAL, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	/* If we didn't get back NFS3_OK, return the appropriate error. */
@@ -665,7 +665,7 @@ proxyv3_setattr2(struct fsal_obj_handle *obj_hdl,
 			      &args, (xdrproc_t)xdr_SETATTR3res, &result)) {
 		LogWarn(COMPONENT_FSAL, "proxyv3_nfs_call failed (%u)",
 			result.status);
-		return fsalstat(ERR_FSAL_INVAL, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	/* If we didn't get back NFS3_OK, return the appropriate error. */
@@ -833,7 +833,7 @@ static fsal_status_t proxyv3_issue_createlike(
 			      proxyv3_nfsd_port(), proxyv3_creds(), nfsProc,
 			      encFunc, encArgs, decFunc, decArgs)) {
 		LogWarn(COMPONENT_FSAL, "%s failed", procName);
-		return fsalstat(ERR_FSAL_INVAL, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	/* Okay, let's see what we got. */
@@ -1128,7 +1128,7 @@ proxyv3_hardlink(struct fsal_obj_handle *obj_hdl,
 			      NFSPROC3_LINK, (xdrproc_t)xdr_LINK3args, &args,
 			      (xdrproc_t)xdr_LINK3res, &result)) {
 		LogWarn(COMPONENT_FSAL, "LINK3 failed");
-		return fsalstat(ERR_FSAL_INVAL, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	/* If we didn't get back NFS3_OK, leave a debugging note.*/
@@ -1179,7 +1179,7 @@ static fsal_status_t proxyv3_readlink(struct fsal_obj_handle *obj_hdl,
 			      NFSPROC3_READLINK, (xdrproc_t)xdr_READLINK3args,
 			      &args, (xdrproc_t)xdr_READLINK3res, &result)) {
 		LogWarn(COMPONENT_FSAL, "rpc for READLINK3 failed.");
-		return fsalstat(ERR_FSAL_SERVERFAULT, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	if (result.status != NFS3_OK) {
@@ -1619,7 +1619,7 @@ static fsal_status_t proxyv3_readdir(struct fsal_obj_handle *dir_hdl,
 			LogWarn(COMPONENT_FSAL,
 				"proxyv3_nfs_call for READDIRPLUS failed (%u)",
 				result.status);
-			return fsalstat(ERR_FSAL_SERVERFAULT, 0);
+			return fsalstat(ERR_FSAL_DELAY, 0);
 		}
 
 		if (result.status != NFS3_OK) {
@@ -1753,8 +1753,7 @@ static void proxyv3_read2(struct fsal_obj_handle *obj_hdl,
 			      (xdrproc_t)xdr_READ3res, &result)) {
 		LogWarn(COMPONENT_FSAL, "proxyv3_nfs_call failed (%u)",
 			result.status);
-		done_cb(obj_hdl, fsalstat(ERR_FSAL_SERVERFAULT, 0), read_arg,
-			cb_arg);
+		done_cb(obj_hdl, fsalstat(ERR_FSAL_DELAY, 0), read_arg, cb_arg);
 		return;
 	}
 
@@ -1888,7 +1887,7 @@ static void proxyv3_write2(struct fsal_obj_handle *obj_hdl,
 			      (xdrproc_t)xdr_WRITE3res, &result)) {
 		LogWarn(COMPONENT_FSAL, "proxyv3_nfs_call failed (%u)",
 			result.status);
-		done_cb(obj_hdl, fsalstat(ERR_FSAL_SERVERFAULT, 0), write_arg,
+		done_cb(obj_hdl, fsalstat(ERR_FSAL_DELAY, 0), write_arg,
 			cb_arg);
 		return;
 	}
@@ -2016,7 +2015,7 @@ static fsal_status_t proxyv3_unlink(struct fsal_obj_handle *dir_hdl,
 			      args, dec, result)) {
 		LogWarn(COMPONENT_FSAL, "proxyv3_nfs_call failed (%u)",
 			*status);
-		return fsalstat(ERR_FSAL_SERVERFAULT, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	/* If the REMOVE/RMDIR failed, report the error upwards. */
@@ -2087,7 +2086,7 @@ static fsal_status_t proxyv3_rename(struct fsal_obj_handle *obj_hdl,
 			      NFSPROC3_RENAME, (xdrproc_t)xdr_RENAME3args,
 			      &args, (xdrproc_t)xdr_RENAME3res, &result)) {
 		LogWarn(COMPONENT_FSAL, "proxyv3_nfs_call for RENAME failed");
-		return fsalstat(ERR_FSAL_SERVERFAULT, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	if (result.status != NFS3_OK) {
@@ -2140,7 +2139,7 @@ static fsal_status_t proxyv3_get_dynamic_info(struct fsal_export *export_handle,
 		LogWarn(COMPONENT_FSAL,
 			"proxyv3_nfs_call for FSSTAT3 failed (%u)",
 			result.status);
-		return fsalstat(ERR_FSAL_INVAL, 0);
+		return fsalstat(ERR_FSAL_DELAY, 0);
 	}
 
 	/* If we didn't get back NFS3_OK, return the appropriate error. */
