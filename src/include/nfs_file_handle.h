@@ -281,7 +281,7 @@ nfsstat4 nfs4_sanity_check_saved_FH(compound_data_t *data, int required_type,
 				"File Handle V3: Len=%u %s name %s",          \
 				nfs3_func_desc[req->rq_msg.cb_proc].funcname, \
 				(fh1)->data.data_len, str1,                   \
-				name1 ? " name " : "", name1 ? "name1" : "",  \
+				name1 ? " name " : "", name1 ? name1 : "",    \
 				(fh2)->data.data_len, str2, name2);           \
 		}                                                             \
 	} while (0)
