@@ -59,6 +59,8 @@
 #endif
 #endif
 
+#include "ff_api.h"
+
 /* parameters for NFSd startup and default values */
 
 static nfs_start_info_t my_nfs_start_info = { .dump_default_config = false,
@@ -173,6 +175,16 @@ static void load_lttng(void)
 
 int main(int argc, char *argv[])
 {
+	/*
+	char *ff_argv[4] = {
+		"./ganesha.nfsd",
+		"--conf=/data/f-stack/config.ini",
+		"--proc-type=primary",
+		"--proc-id=0"
+	};
+	ff_init(4, ff_argv);
+	*/
+	fprintf(stderr, "Officially start nfs...\n");
 	char *tempo_exec_name = NULL;
 	char localmachine[MAXHOSTNAMELEN + 1];
 	int c;
@@ -191,6 +203,8 @@ int main(int argc, char *argv[])
 #endif
 	sigset_t signals_to_block;
 	struct config_error_type err_type;
+
+	FILE *logfile = fopen("/tmp/log.lyp", "w");
 
 	/* Set the server's boot time and epoch */
 	now(&nfs_ServerBootTime);
@@ -212,8 +226,10 @@ int main(int argc, char *argv[])
 		nfs_host_name = main_strdup("host_name", localmachine);
 	}
 
+	optind = 1;
 	/* now parsing options with getopt */
 	while ((c = getopt(argc, argv, options)) != EOF) {
+		fprintf(logfile, "c=%c\n", c);
 		switch (c) {
 		case 'v':
 		case '@':
@@ -232,6 +248,8 @@ int main(int argc, char *argv[])
 		case 'L':
 			/* Default Log */
 			log_path = main_strdup("log_path", optarg);
+			fprintf(logfile, "log_path=%s\n", log_path);
+			fflush(logfile);
 			break;
 #ifdef USE_LTTNG
 		case 'G':
@@ -264,6 +282,7 @@ int main(int argc, char *argv[])
 			/* config file */
 
 			nfs_config_path = main_strdup("config_path", optarg);
+			fprintf(stderr, "config_path=%s\n", nfs_config_path);
 			break;
 
 		case 'p':
@@ -321,6 +340,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	fprintf(logfile, "Finish parsing arguments\n");
+	fflush(logfile);
+
 	/* initialize memory and logging */
 	nfs_prereq_init(exec_name, nfs_host_name, debug_level, log_path,
 			dump_trace, stack_size);
@@ -335,12 +357,14 @@ int main(int argc, char *argv[])
 
 	/* initialize nfs_init */
 	nfs_init_init();
-
+        fprintf(logfile, "Finish nfs init init\n");
+	fflush(logfile);
 	nfs_check_malloc();
 
 	/* Start in background, if wanted */
 	if (detach_flag) {
 #ifdef HAVE_DAEMON
+		fprintf(logfile, "HAVE_DAEMON\n");
 		/* daemonize the process (fork, close xterm fds,
 		 * detach from parent process) */
 		if (daemon(0, 0))
@@ -439,6 +463,10 @@ int main(int argc, char *argv[])
 	/* multiple instances from starting, so any failure creating   */
 	/* this file is a fatal error.                                 */
 	pidfile = open(nfs_pidfile_path, O_CREAT | O_RDWR, 0644);
+	fprintf(logfile, "just opened pidfile\n");
+	fprintf(logfile, "pid = %d", getpid());
+	fflush(logfile);
+
 	if (pidfile == -1) {
 		LogFatal(
 			COMPONENT_MAIN,
@@ -480,6 +508,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	fprintf(logfile, "finish pidfile\n");
+	fflush(logfile);
+
 	/* Set up for the signal handler.
 	 * Blocks the signals the signal handler will handle.
 	 */
@@ -508,6 +539,9 @@ int main(int argc, char *argv[])
 	} else
 		nfs_config_struct =
 			config_ParseFile(nfs_config_path, &err_type);
+
+	fprintf(logfile, "Finish parsing nfs config\n");
+	fflush(logfile);
 
 	if (!config_error_no_error(&err_type)) {
 		char *errstr = err_type_str(&err_type);
@@ -634,6 +668,8 @@ int main(int argc, char *argv[])
 
 	config_Free(nfs_config_struct);
 
+	fprintf(logfile, "Just about to nfs_start\n");
+	fflush(logfile);
 	/* Everything seems to be OK! We can now start service threads */
 	nfs_start(&my_nfs_start_info);
 

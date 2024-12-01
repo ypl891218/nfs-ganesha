@@ -63,6 +63,9 @@
 #include <stdbool.h>
 #include <urcu-bp.h>
 
+#include "ff_api.h"
+#include <sys/ioctl.h>
+
 #define P_FAMILY AF_INET6
 
 static struct fridgethr *_9p_worker_fridge;
@@ -620,7 +623,7 @@ void *_9p_socket_thread(void *Arg)
 
 	for (;;) {
 		total_readlen = 0; /* new message */
-		rc = poll(fds, fdcount, -1);
+		rc = ff_poll(fds, fdcount, -1);
 		if (rc == -1) {
 			/* timeout = -1 => Wait indefinitely for events */
 			/* Interruption if not an issue */
@@ -655,7 +658,7 @@ void *_9p_socket_thread(void *Arg)
 
 		/* An incoming 9P request: the msg has a 4 bytes header
 		   showing the size of the msg including the header */
-		readlen = recv(fds[0].fd, _9pmsg, _9P_HDR_SIZE, MSG_WAITALL);
+		readlen = ff_recv(fds[0].fd, _9pmsg, _9P_HDR_SIZE, MSG_WAITALL);
 		if (readlen != _9P_HDR_SIZE)
 			goto badmsg;
 
@@ -674,7 +677,7 @@ void *_9p_socket_thread(void *Arg)
 
 		total_readlen += readlen;
 		while (total_readlen < msglen) {
-			readlen = recv(fds[0].fd, _9pmsg + total_readlen,
+			readlen = ff_recv(fds[0].fd, _9pmsg + total_readlen,
 				       msglen - total_readlen, 0);
 
 			if (readlen > 0) {
@@ -778,34 +781,47 @@ static int _9p_create_socket_V4(void)
 	int one = 1;
 	int centvingt = 120;
 	int neuf = 9;
-	struct netbuf netbuf_tcp;
-	struct t_bind bindaddr_tcp;
-	struct __rpc_sockinfo si_tcp;
 	struct sockaddr_in sinaddr_tcp;
 
-	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	FILE *logfile = fopen("/tmp/log.lyp", "aw");
+
+	fprintf(logfile, "ready to ff_socket\n");
+	fflush(logfile);
+
+	sock = ff_socket(AF_INET, SOCK_STREAM, 0);
 	if (sock == -1) {
+		fprintf(logfile, "Error creating 9p V4 socket, error %d(%s)", errno, strerror(errno));
+		fflush(logfile);
 		LogWarn(COMPONENT_9P_DISPATCH,
 			"Error creating 9p V4 socket, error %d(%s)", errno,
 			strerror(errno));
 		return -1;
 	}
 
-	if ((setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) ==
+	fprintf(logfile, "ff_socket succeeded\n");
+	fflush(logfile);
+
+	if ((ff_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) ==
 	     -1) ||
-	    (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) ==
+	    (ff_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) ==
 	     -1) ||
-	    (setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &centvingt,
+	    (ff_setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &centvingt,
 			sizeof(centvingt)) == -1) ||
-	    (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &centvingt,
+	    (ff_setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &centvingt,
 			sizeof(centvingt)) == -1) ||
-	    (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &neuf, sizeof(neuf)) ==
+	    (ff_setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &neuf, sizeof(neuf)) ==
 	     -1)) {
 		LogWarn(COMPONENT_9P_DISPATCH,
 			"Error setting 9p V4 socket option, error %d(%s)",
 			errno, strerror(errno));
 		goto err;
 	}
+
+	fprintf(logfile, "ff_setsockopt succeeded\n");
+	fflush(logfile);
+
+	int on = 1;
+	ff_ioctl(sock, FIONBIO, &on);
 
 	memset(&sinaddr_tcp, 0, sizeof(sinaddr_tcp));
 	sinaddr_tcp.sin_family = AF_INET;
@@ -814,34 +830,24 @@ static int _9p_create_socket_V4(void)
 	sinaddr_tcp.sin_addr.s_addr = htonl(INADDR_ANY);
 	sinaddr_tcp.sin_port = htons(_9p_param._9p_tcp_port);
 
-	netbuf_tcp.maxlen = sizeof(sinaddr_tcp);
-	netbuf_tcp.len = sizeof(sinaddr_tcp);
-	netbuf_tcp.buf = &sinaddr_tcp;
-
-	bindaddr_tcp.qlen = SOMAXCONN;
-	bindaddr_tcp.addr = netbuf_tcp;
-
-	if (!__rpc_fd2sockinfo(sock, &si_tcp)) {
-		LogWarn(COMPONENT_9P_DISPATCH,
-			"Cannot get 9p socket info for tcp V4 socket error %d(%s)",
-			errno, strerror(errno));
-		goto err;
-	}
-
-	if (bind(sock, (struct sockaddr *)bindaddr_tcp.addr.buf,
-		 (socklen_t)si_tcp.si_alen) == -1) {
+	if (ff_bind(sock, (struct linux_sockaddr *)&sinaddr_tcp, sizeof(sinaddr_tcp)) == -1) {
 		LogWarn(COMPONENT_9P_DISPATCH,
 			"Cannot bind 9p tcp V4 socket, error %d(%s)", errno,
 			strerror(errno));
 		goto err;
 	}
 
-	if (listen(sock, 20) == -1) {
+	fprintf(logfile, "ff_bind succeeded\n");
+	fflush(logfile);
+
+	if (ff_listen(sock, 20) == -1) {
 		LogWarn(COMPONENT_9P_DISPATCH,
 			"Cannot bind 9p tcp V4 socket, error %d(%s)", errno,
 			strerror(errno));
 		goto err;
 	}
+	fprintf(logfile, "ff_listen succeeded\n");
+	fflush(logfile);
 
 	return sock;
 
@@ -861,82 +867,18 @@ err:
 static int _9p_create_socket_V6(void)
 {
 	int sock = -1;
-	int one = 1;
-	int centvingt = 120;
-	int neuf = 9;
-	struct sockaddr_in6 sinaddr_tcp6;
-	struct netbuf netbuf_tcp6;
-	struct t_bind bindaddr_tcp6;
-	struct __rpc_sockinfo si_tcp6;
 
-	sock = socket(P_FAMILY, SOCK_STREAM, IPPROTO_TCP);
+	// sock = socket(P_FAMILY, SOCK_STREAM, IPPROTO_TCP);
 	if (sock == -1) {
-		if (errno == EAFNOSUPPORT) {
-			LogWarn(COMPONENT_9P_DISPATCH,
-				"Error creating socket, V6 intfs disabled? error %d(%s)",
-				errno, strerror(errno));
+		// if (errno == EAFNOSUPPORT) {
+		//	LogWarn(COMPONENT_9P_DISPATCH,
+		//		"Error creating socket, V6 intfs disabled? error %d(%s)",
+		//		errno, strerror(errno));
 			return _9p_create_socket_V4();
-		}
+		//}
 
-		return -1;
+		//return -1;
 	}
-
-	if ((setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) ==
-	     -1) ||
-	    (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) ==
-	     -1) ||
-	    (setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &centvingt,
-			sizeof(centvingt)) == -1) ||
-	    (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &centvingt,
-			sizeof(centvingt)) == -1) ||
-	    (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &neuf, sizeof(neuf)) ==
-	     -1)) {
-		LogWarn(COMPONENT_9P_DISPATCH,
-			"Error setting V6 socket option, error %d(%s)", errno,
-			strerror(errno));
-		goto err;
-	}
-
-	memset(&sinaddr_tcp6, 0, sizeof(sinaddr_tcp6));
-	sinaddr_tcp6.sin6_family = AF_INET6;
-	/* All the interfaces on the machine are used */
-	sinaddr_tcp6.sin6_addr = in6addr_any;
-	sinaddr_tcp6.sin6_port = htons(_9p_param._9p_tcp_port);
-
-	netbuf_tcp6.maxlen = sizeof(sinaddr_tcp6);
-	netbuf_tcp6.len = sizeof(sinaddr_tcp6);
-	netbuf_tcp6.buf = &sinaddr_tcp6;
-
-	bindaddr_tcp6.qlen = SOMAXCONN;
-	bindaddr_tcp6.addr = netbuf_tcp6;
-
-	if (!__rpc_fd2sockinfo(sock, &si_tcp6)) {
-		LogWarn(COMPONENT_9P_DISPATCH,
-			"Cannot get 9p socket info for tcp6 socket error %d(%s)",
-			errno, strerror(errno));
-		goto err;
-	}
-
-	if (bind(sock, (struct sockaddr *)bindaddr_tcp6.addr.buf,
-		 (socklen_t)si_tcp6.si_alen) == -1) {
-		LogWarn(COMPONENT_9P_DISPATCH,
-			"Cannot bind 9p tcp6 socket, error %d (%s)", errno,
-			strerror(errno));
-		goto err;
-	}
-
-	if (listen(sock, 20) == -1) {
-		LogWarn(COMPONENT_9P_DISPATCH,
-			"Cannot bind 9p tcp6 socket, error %d (%s)", errno,
-			strerror(errno));
-		goto err;
-	}
-
-	return sock;
-
-err:
-
-	close(sock);
 	return -1;
 }
 
@@ -953,6 +895,13 @@ err:
  */
 void *_9p_dispatcher_thread(void *Arg)
 {
+        char *ff_argv[4] = {
+                "./ganesha.nfsd",
+                "--conf=/data/f-stack/config.ini",
+                "--proc-type=primary",
+                "--proc-id=0"
+        };
+        ff_init(4, ff_argv);
 	int _9p_socket;
 	int rc = 0;
 	long newsock = -1;
@@ -961,6 +910,8 @@ void *_9p_dispatcher_thread(void *Arg)
 
 	SetNameFunction("_9p_disp");
 
+	FILE *logfile = fopen("/tmp/log.lyp", "aw");
+	fprintf(logfile, "Inside _9p_dispatcher_thread\n");
 	rcu_register_thread();
 
 	/* Calling dispatcher main loop */
@@ -979,6 +930,8 @@ void *_9p_dispatcher_thread(void *Arg)
 			 "Can't get socket for 9p dispatcher");
 	}
 
+	fprintf(logfile, "socket fd = %d\n", _9p_socket);
+
 	/* Init for thread parameter (mostly for scheduling) */
 	PTHREAD_ATTR_init(&attr_thr);
 	PTHREAD_ATTR_setscope(&attr_thr, PTHREAD_SCOPE_SYSTEM);
@@ -986,8 +939,11 @@ void *_9p_dispatcher_thread(void *Arg)
 
 	LogEvent(COMPONENT_9P_DISPATCH, "9P dispatcher started");
 
+	fprintf(logfile, "ready to accept new connection\n");
+	fflush(logfile);
+
 	while (true) {
-		newsock = accept(_9p_socket, NULL, NULL);
+		newsock = ff_accept(_9p_socket, NULL, NULL);
 
 		if (newsock < 0) {
 			LogCrit(COMPONENT_9P_DISPATCH, "accept failed: %d",
@@ -995,6 +951,8 @@ void *_9p_dispatcher_thread(void *Arg)
 			continue;
 		}
 
+		fprintf(logfile, "new connection: %ld\n", newsock);
+		fflush(logfile);
 		/* Starting the thread dedicated to signal handling */
 		rc = pthread_create(&tcp_thrid, &attr_thr, _9p_socket_thread,
 				    (void *)newsock);

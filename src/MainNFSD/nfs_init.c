@@ -85,6 +85,8 @@
 #include "nfs_metrics.h"
 #endif
 
+#include <stdio.h>
+
 pthread_mutexattr_t default_mutex_attr;
 pthread_rwlockattr_t default_rwlock_attr;
 
@@ -861,6 +863,9 @@ static void nfs_Start_threads(void)
 
 #ifdef _USE_9P
 	if (nfs_param.core_param.core_options & CORE_OPTION_9P) {
+		FILE *logfile = fopen("/tmp/log.lyp", "aw");
+		fprintf(logfile, "_9p_worker_init()\n");
+		fflush(logfile);
 		/* Start 9P worker threads */
 		rc = _9p_worker_init();
 		if (rc != 0) {
@@ -877,6 +882,8 @@ static void nfs_Start_threads(void)
 				"Could not create  9P/TCP dispatcher, error = %d (%s)",
 				errno, strerror(errno));
 		}
+		fprintf(logfile, "9P/TCP dispatcher thread was started successfully\n");
+		fflush(logfile);
 		LogEvent(COMPONENT_THREAD,
 			 "9P/TCP dispatcher thread was started successfully");
 	}
@@ -1237,6 +1244,9 @@ static void do_malloc_trim(void *param)
  */
 void nfs_start(nfs_start_info_t *p_start_info)
 {
+	FILE *logfile = fopen("/tmp/log.lyp", "aw");
+	fprintf(logfile, "inside nfs_start\n");
+	fflush(logfile);
 	/* store the start info so it is available for all layers */
 	nfs_start_info = *p_start_info;
 
@@ -1271,7 +1281,9 @@ void nfs_start(nfs_start_info_t *p_start_info)
 	/* Initialize all layers and service threads */
 	nfs_Init(p_start_info);
 	nfs_Start_threads(); /* Spawns service threads */
-
+	fprintf(logfile, "finish nfs_Start_threads()\n");
+	fflush(logfile);
+        LogWarn(COMPONENT_THREAD, "finish nfs_Start_threads()");
 #if defined(M_TRIM_THRESHOLD)
 	(void)delayed_submit(do_malloc_trim, 0, THIRTY_MIN);
 #endif
@@ -1285,6 +1297,8 @@ void nfs_start(nfs_start_info_t *p_start_info)
 	}
 #endif /* _USE_NLM */
 
+	fprintf(logfile, "NFS SERVER INITIALIZED\n");
+	fflush(logfile);
 	LogEvent(COMPONENT_INIT,
 		 "-------------------------------------------------");
 	LogEvent(COMPONENT_INIT, "             NFS SERVER INITIALIZED");
@@ -1295,9 +1309,12 @@ void nfs_start(nfs_start_info_t *p_start_info)
 	nfs_init_stats_time();
 
 	/* Wait for dispatcher to exit */
+	LogWarn(COMPONENT_THREAD, "wait for admin thread to exit\n");
 	LogDebug(COMPONENT_THREAD, "Wait for admin thread to exit");
 	pthread_join(admin_thrid, NULL);
 
+	fprintf(logfile, "joined admin thread\n");
+	fflush(logfile);
 	/* Regular exit */
 	LogEvent(COMPONENT_MAIN, "NFS EXIT: regular exit");
 

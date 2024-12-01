@@ -800,6 +800,10 @@ void *admin_thread(void *UnusedArg)
 	SetNameFunction("Admin");
 	rcu_register_thread();
 
+	FILE *logfile = fopen("/tmp/log.lyp", "aw");
+	fprintf(logfile, "waiting to shutdown admin thread\n");
+	fflush(logfile);
+
 	PTHREAD_MUTEX_lock(&admin_control_mtx);
 
 	while (!admin_shutdown) {
@@ -808,6 +812,9 @@ void *admin_thread(void *UnusedArg)
 	}
 
 	PTHREAD_MUTEX_unlock(&admin_control_mtx);
+
+	fprintf(logfile, "ready to do_shutdown\n");
+	fflush(logfile);
 
 	do_shutdown();
 

@@ -279,6 +279,9 @@ else()
   message(WARNING "Unhandled architecture ${ARCH}")
 endif ()
 
+# Turn on fstack
+goption(USE_FSTACK "build with fstack/dpdk" ON)
+
 # FSAL selection
 # FSALs which are enabled by default but could be disabled
 # during the build
@@ -311,7 +314,7 @@ endif(USE_MONITORING)
 
 # nTIRPC
 option(USE_SYSTEM_NTIRPC "Use the system nTIRPC, rather than the submodule" OFF)
-option (USE_GSS "enable RPCSEC_GSS support" ON)
+option (USE_GSS "enable RPCSEC_GSS support" OFF)
 option(TIRPC_EPOLL "platform supports EPOLL or emulation" ON)
 
 # Build configure options
@@ -1210,6 +1213,33 @@ check_library_exists(
 	""
 	HAVE_DAEMON
 	)
+
+if (USE_FSTACK)
+  execute_process(
+      COMMAND pkg-config --static --libs /usr/local/lib/x86_64-linux-gnu/pkgconfig/libdpdk.pc
+      RESULT_VARIABLE result
+      OUTPUT_VARIABLE pkg_output
+      ERROR_VARIABLE pkg_error
+  )
+
+  if(NOT result EQUAL 0)
+      message(FATAL_ERROR "pkg-config failed: ${pkg_error}")
+  else()
+      message(STATUS "pkg-config output: ${pkg_output}")
+  endif()
+
+  string(REGEX MATCHALL "-l:[^ ]+" LIBRARIES "${pkg_output}")
+
+  foreach(LIBRARY ${LIBRARIES})
+      string(REPLACE "-l:" "" CLEAN_LIBRARY ${LIBRARY})
+      string(REPLACE ".a" ".so" FINAL_LIBRARY ${CLEAN_LIBRARY})
+      list(APPEND CLEAN_LIBRARIES ${FINAL_LIBRARY})
+  endforeach()
+
+  message(STATUS "Libraries: ${CLEAN_LIBRARIES}")
+  message(STATUS "DPDK_LIBRARIES:  ${DPDK_LIBRARIES}")
+  set(FSTACK_LIBRARIES /data/f-stack/lib/libfstack.a ${CLEAN_LIBRARIES} ${DPDK_LIBRARIES} rt m dl crypto numa)
+endif (USE_FSTACK)
 
 # Needs to be before ntirpc
 add_custom_target( rpm DEPENDS dist)

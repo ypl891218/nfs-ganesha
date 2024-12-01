@@ -1055,6 +1055,7 @@ void init_logging(const char *log_path, const int debug_level)
 			 strerror(-rc));
 
 	if (log_path) {
+		fprintf(stderr, "log_path=%s\n", log_path);
 		if ((strcmp(log_path, "STDERR") == 0) ||
 		    (strcmp(log_path, "SYSLOG") == 0) ||
 		    (strcmp(log_path, "STDOUT") == 0)) {
@@ -1067,12 +1068,14 @@ void init_logging(const char *log_path, const int debug_level)
 			rc = create_log_facility("FILE", log_to_file,
 						 NIV_FULL_DEBUG, LH_ALL,
 						 (void *)log_path);
+			LogWarn(COMPONENT_LOG, "create_log_facility = %d\n", rc);
 			if (rc != 0)
 				LogFatal(
 					COMPONENT_LOG,
 					"Create error (%s) for FILE (%s) logging!",
 					strerror(-rc), log_path);
 			rc = set_default_log_facility("FILE");
+			LogWarn(COMPONENT_LOG, "after set default log facility\n");
 			if (rc != 0)
 				LogFatal(
 					COMPONENT_LOG,

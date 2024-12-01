@@ -43,6 +43,8 @@
 #include "nfs_file_handle.h"
 #include "server_stats.h"
 
+#include "ff_api.h"
+
 /* opcode to function array */
 const struct _9p_function_desc _9pfuncdesc[] = {
 	[0] = { _9p_not_2000L, "no function" }, /* out of bounds */
@@ -110,7 +112,7 @@ static ssize_t tcp_conn_send(struct _9p_conn *conn, const void *buf, size_t len,
 	ssize_t ret;
 
 	PTHREAD_MUTEX_lock(&conn->sock_lock);
-	ret = send(conn->trans_data.sockfd, buf, len, flags);
+	ret = ff_send(conn->trans_data.sockfd, buf, len, flags);
 	PTHREAD_MUTEX_unlock(&conn->sock_lock);
 
 	if (ret < 0)
